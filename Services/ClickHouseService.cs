@@ -52,12 +52,12 @@ public class ClickHouseService
         await connection.OpenAsync();
 
         var query = @"
-            SELECT 
+            SELECT
                 Id, SessionId, EventName, EventType,
-                EventTime, EventParams, CreatedAt
+                EventParams, CreatedAt
             FROM Events
             WHERE SessionId = @SessionId
-            ORDER BY EventTime";
+            ORDER BY CreatedAt";
 
         var events = await connection.QueryAsync<EventRecord>(
             query,
@@ -329,16 +329,45 @@ public class ClickHouseService
             // If JSON fails, try regex parsing for format: {phoneNumber: X, userId: Y, deviceId: Z}
             try
             {
-                var phoneMatch = Regex.Match(metaData, @"phoneNumber:\s*([^,}]+)");
-                var userMatch = Regex.Match(metaData, @"userId:\s*([^,}]+)");
-                var deviceMatch = Regex.Match(metaData, @"deviceId:\s*([^,}]+)");
+                var result = new MetaDataInfo();
 
-                return new MetaDataInfo
+                // Match phoneNumber with flexible value handling
+                var phoneMatch = Regex.Match(metaData, @"phoneNumber:\s*([^,}]+)");
+                if (phoneMatch.Success)
                 {
-                    PhoneNumber = phoneMatch.Success ? phoneMatch.Groups[1].Value.Trim() : string.Empty,
-                    UserId = userMatch.Success ? userMatch.Groups[1].Value.Trim() : string.Empty,
-                    DeviceId = deviceMatch.Success ? deviceMatch.Groups[1].Value.Trim() : string.Empty
-                };
+                    var value = phoneMatch.Groups[1].Value.Trim();
+                    // Filter out null, empty, or whitespace values
+                    if (!string.IsNullOrWhiteSpace(value) && value != "null")
+                    {
+                        result.PhoneNumber = value;
+                    }
+                }
+
+                // Match userId with flexible value handling
+                var userMatch = Regex.Match(metaData, @"userId:\s*([^,}]+)");
+                if (userMatch.Success)
+                {
+                    var value = userMatch.Groups[1].Value.Trim();
+                    // Filter out null, empty, or whitespace values
+                    if (!string.IsNullOrWhiteSpace(value) && value != "null")
+                    {
+                        result.UserId = value;
+                    }
+                }
+
+                // Match deviceId with flexible value handling
+                var deviceMatch = Regex.Match(metaData, @"deviceId:\s*([^,}]+)");
+                if (deviceMatch.Success)
+                {
+                    var value = deviceMatch.Groups[1].Value.Trim();
+                    // Filter out null, empty, or whitespace values
+                    if (!string.IsNullOrWhiteSpace(value) && value != "null")
+                    {
+                        result.DeviceId = value;
+                    }
+                }
+
+                return result;
             }
             catch (Exception ex)
             {
@@ -394,9 +423,9 @@ public class ClickHouseService
         await connection.ExecuteAsync(insertQuery, new
         {
             result.SessionId,
-            result.ProfileId,
+            ProfileId = result.ProfileId?.ToString() ?? string.Empty,  // Convert Guid? to string
             result.DeviceKey,
-            result.GlobalDeviceId,
+            GlobalDeviceId = result.GlobalDeviceId.ToString(),  // Convert Guid to string
             result.UserId,
             result.PhoneNumber,
             result.AnalyzedAt,
@@ -437,9 +466,9 @@ public class ClickHouseService
         return results.Select(r => new FraudAnalysisResult
         {
             SessionId = r.SessionId,
-            ProfileId = r.ProfileId,
+            ProfileId = !string.IsNullOrEmpty(r.ProfileId) ? Guid.Parse(r.ProfileId) : (Guid?)null,  // Convert string to Guid?
             DeviceKey = r.DeviceKey,
-            GlobalDeviceId = r.GlobalDeviceId,
+            GlobalDeviceId = Guid.Parse(r.GlobalDeviceId),  // Convert string to Guid
             UserId = r.UserId,
             PhoneNumber = r.PhoneNumber,
             AnalyzedAt = r.AnalyzedAt,
