@@ -149,7 +149,7 @@ public class FeatureEngineeringService
         var intervals = new List<double>();
         for (int i = 1; i < events.Count; i++)
         {
-            intervals.Add((events[i].EventTime - events[i - 1].EventTime).TotalSeconds);
+            intervals.Add((events[i].CreatedAt - events[i - 1].CreatedAt).TotalSeconds);
         }
 
         return intervals.Any() ? (float)intervals.Average() : 0f;
