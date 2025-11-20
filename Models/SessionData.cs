@@ -2,10 +2,10 @@
 
 public class SessionRecord
 {
-    public string Id { get; set; } = string.Empty;
+    public Guid Id { get; set; }
     public string SessionId { get; set; } = string.Empty;
-    public string GlobalId { get; set; } = string.Empty;
-    public string GlobalDeviceId { get; set; } = string.Empty;
+    public Guid GlobalId { get; set; } 
+    public Guid GlobalDeviceId { get; set; } 
     public string DeviceContext { get; set; } = string.Empty;
     public string Type { get; set; } = string.Empty;
     public DateTime CreatedAt { get; set; }
@@ -13,7 +13,7 @@ public class SessionRecord
     public string DeviceKey { get; set; } = string.Empty;
     public string AppSetId { get; set; } = string.Empty;
     public string MetaData { get; set; } = string.Empty;
-    public string ProfileId { get; set; } = string.Empty;
+    public Guid ProfileId { get; set; } 
 }
 
 public class EventRecord

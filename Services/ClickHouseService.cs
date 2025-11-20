@@ -32,7 +32,7 @@ public class ClickHouseService
                 Id, SessionId, GlobalId, GlobalDeviceId,
                 DeviceContext, Type, CreatedAt, ExpireAt,
                 DeviceKey, AppSetId, MetaData, ProfileId
-            FROM ch_frauddetection.Sessions
+            FROM Sessions
             WHERE CreatedAt >= @FromDate
             ORDER BY CreatedAt DESC
             LIMIT @Limit";
@@ -55,7 +55,7 @@ public class ClickHouseService
             SELECT 
                 Id, SessionId, EventName, EventType,
                 EventTime, EventParams, CreatedAt
-            FROM ch_frauddetection.Events
+            FROM Events
             WHERE SessionId = @SessionId
             ORDER BY EventTime";
 
@@ -69,7 +69,7 @@ public class ClickHouseService
     // ==================== DEVICE HISTORY ====================
 
     public async Task<DeviceHistory> GetDeviceHistoryAsync(
-        string globalDeviceId,
+        Guid globalDeviceId,
         DateTime fromDate)
     {
         using var connection = new ClickHouseConnection(_connectionString);
@@ -80,7 +80,7 @@ public class ClickHouseService
                 COUNT(DISTINCT SessionId) as TotalSessions,
                 COUNT(DISTINCT JSONExtractString(DeviceContext, 'Network', 'XClientIp')) as UniqueIpCount,
                 COUNT(DISTINCT JSONExtractString(DeviceContext, 'Network', 'OperatorName')) as DifferentCarrierCount
-            FROM ch_frauddetection.Sessions
+            FROM Sessions
             WHERE GlobalDeviceId = @GlobalDeviceId
               AND CreatedAt >= @FromDate";
 
@@ -94,7 +94,7 @@ public class ClickHouseService
     // ==================== MULTI-ACCOUNTING QUERIES ====================
 
     public async Task<MultiAccountingHistory> GetMultiAccountingHistoryAsync(
-        string globalDeviceId)
+    Guid globalDeviceId)
     {
         using var connection = new ClickHouseConnection(_connectionString);
         await connection.OpenAsync();
@@ -103,29 +103,29 @@ public class ClickHouseService
 
         // Get unique users and phone numbers for different time windows
         var query = @"
-            WITH parsed_metadata AS (
-                SELECT 
-                    SessionId,
-                    CreatedAt,
-                    JSONExtractString(MetaData, 'userId') as UserId,
-                    JSONExtractString(MetaData, 'phoneNumber') as PhoneNumber,
-                    DeviceContext
-                FROM ch_frauddetection.Sessions
-                WHERE GlobalDeviceId = @GlobalDeviceId
-                  AND MetaData != ''
-                  AND MetaData != 'null'
-                  AND CreatedAt >= @From30Days
-            )
+        WITH parsed_metadata AS (
             SELECT 
-                uniqExact(UserId) as TotalUniqueUsers,
-                uniqExactIf(UserId, CreatedAt >= @From24Hours) as UniqueUserIds_24h,
-                uniqExactIf(UserId, CreatedAt >= @From7Days) as UniqueUserIds_7d,
-                uniqExact(UserId) as UniqueUserIds_30d,
-                uniqExactIf(PhoneNumber, CreatedAt >= @From7Days) as UniquePhoneNumbers_7d,
-                countIf(CreatedAt >= @From24Hours) as NewUsers_24h,
-                countIf(CreatedAt >= @From7Days) as NewUsers_7d
-            FROM parsed_metadata
-            WHERE UserId != ''";
+                SessionId,
+                CreatedAt,
+                JSONExtractString(MetaData, 'userId') as UserId,
+                JSONExtractString(MetaData, 'phoneNumber') as PhoneNumber,
+                DeviceContext
+            FROM Sessions
+            WHERE GlobalDeviceId = @GlobalDeviceId
+              AND MetaData != ''
+              AND MetaData != 'null'
+              AND CreatedAt >= @From30Days
+        )
+        SELECT 
+            uniqExact(UserId) as TotalUniqueUsers,
+            uniqExactIf(UserId, CreatedAt >= @From24Hours) as UniqueUserIds_24h,
+            uniqExactIf(UserId, CreatedAt >= @From7Days) as UniqueUserIds_7d,
+            uniqExact(UserId) as UniqueUserIds_30d,
+            uniqExactIf(PhoneNumber, CreatedAt >= @From7Days) as UniquePhoneNumbers_7d,
+            countIf(CreatedAt >= @From24Hours) as NewUsers_24h,
+            countIf(CreatedAt >= @From7Days) as NewUsers_7d
+        FROM parsed_metadata
+        WHERE UserId != ''";
 
         var result = await connection.QueryFirstOrDefaultAsync<dynamic>(query, new
         {
@@ -137,66 +137,61 @@ public class ClickHouseService
 
         // Get user behavior patterns
         var behaviorQuery = @"
-            WITH parsed_metadata AS (
-                SELECT 
-                    s.SessionId,
-                    JSONExtractString(s.MetaData, 'userId') as UserId,
-                    s.CreatedAt
-                FROM ch_frauddetection.Sessions s
-                WHERE s.GlobalDeviceId = @GlobalDeviceId
-                  AND s.MetaData != ''
-                  AND s.CreatedAt >= @From7Days
-            ),
-            user_events AS (
-                SELECT 
-                    pm.UserId,
-                    e.EventName
-                FROM parsed_metadata pm
-                INNER JOIN ch_frauddetection.Events e ON e.SessionId = pm.SessionId
-                WHERE pm.UserId != ''
-            )
+        WITH parsed_metadata AS (
             SELECT 
-                UserId,
-                countIf(EventName = 'add_card_otp_success_entered') as CardAdditions,
-                countIf(EventName = 'p2p_otp_success') as P2PTransfers,
-                countIf(EventName = 'payment_confirm') as Payments,
-                countIf(EventName IN ('add_card_otp_unsuccess_entered', 'otp_page_error')) as OtpFailures
-            FROM user_events
-            GROUP BY UserId";
+                s.SessionId,
+                JSONExtractString(s.MetaData, 'userId') as UserId,
+                s.CreatedAt
+            FROM Sessions s
+            WHERE s.GlobalDeviceId = @GlobalDeviceId
+              AND s.MetaData != ''
+              AND s.MetaData != 'null'
+              AND s.CreatedAt >= @From7Days
+        ),
+        user_events AS (
+            SELECT 
+                pm.UserId,
+                e.EventName
+            FROM parsed_metadata pm
+            INNER JOIN Events e ON e.SessionId = pm.SessionId
+            WHERE pm.UserId != ''
+        )
+        SELECT 
+            UserId,
+            countIf(EventName = 'add_card_otp_success_entered') as CardAdditions,
+            countIf(EventName = 'p2p_otp_success') as P2PTransfers,
+            countIf(EventName = 'payment_confirm') as Payments,
+            countIf(EventName IN ('add_card_otp_unsuccess_entered', 'otp_page_error')) as OtpFailures
+        FROM user_events
+        GROUP BY UserId";
 
         var behaviors = await connection.QueryAsync<UserBehaviorPattern>(
             behaviorQuery,
             new { GlobalDeviceId = globalDeviceId, From7Days = now.AddDays(-7) });
 
-        // Calculate user switches (approximate)
+        // Calculate user switches - Using simplified approach
         var switchQuery = @"
-            WITH parsed_metadata AS (
-                SELECT 
-                    SessionId,
-                    CreatedAt,
-                    JSONExtractString(MetaData, 'userId') as UserId,
-                    lag(JSONExtractString(MetaData, 'userId')) OVER (ORDER BY CreatedAt) as PrevUserId
-                FROM ch_frauddetection.Sessions
-                WHERE GlobalDeviceId = @GlobalDeviceId
-                  AND MetaData != ''
-                  AND CreatedAt >= @From7Days
-            )
-            SELECT COUNT(*) as Switches
-            FROM parsed_metadata
-            WHERE UserId != PrevUserId AND PrevUserId != ''";
+        SELECT COUNT(DISTINCT JSONExtractString(MetaData, 'userId')) - 1 as Switches
+        FROM Sessions
+        WHERE GlobalDeviceId = @GlobalDeviceId
+          AND MetaData != ''
+          AND MetaData != 'null'
+          AND JSONExtractString(MetaData, 'userId') != ''
+          AND CreatedAt >= @From7Days
+        HAVING COUNT(DISTINCT JSONExtractString(MetaData, 'userId')) > 1";
 
-        var switches = await connection.QueryFirstOrDefaultAsync<int>(
+        var switches = await connection.QueryFirstOrDefaultAsync<int?>(
             switchQuery,
-            new { GlobalDeviceId = globalDeviceId, From7Days = now.AddDays(-7) });
+            new { GlobalDeviceId = globalDeviceId, From7Days = now.AddDays(-7) }) ?? 0;
 
         return new MultiAccountingHistory
         {
-            UniqueUserIds_24h = result?.UniqueUserIds_24h ?? 0,
-            UniqueUserIds_7d = result?.UniqueUserIds_7d ?? 0,
-            UniqueUserIds_30d = result?.UniqueUserIds_30d ?? 0,
-            UniquePhoneNumbers_7d = result?.UniquePhoneNumbers_7d ?? 0,
-            NewUsers_24h = result?.NewUsers_24h ?? 0,
-            NewUsers_7d = result?.NewUsers_7d ?? 0,
+            UniqueUserIds_24h = (int)(result?.UniqueUserIds_24h ?? 0),
+            UniqueUserIds_7d = (int)(result?.UniqueUserIds_7d ?? 0),
+            UniqueUserIds_30d = (int)(result?.UniqueUserIds_30d ?? 0),
+            UniquePhoneNumbers_7d = (int)(result?.UniquePhoneNumbers_7d ?? 0),
+            NewUsers_24h = (int)(result?.NewUsers_24h ?? 0),
+            NewUsers_7d = (int)(result?.NewUsers_7d ?? 0),
             UserSwitches = switches,
             UserBehaviors = behaviors.ToList()
         };
@@ -225,7 +220,7 @@ public class ClickHouseService
                     JSONExtractString(DeviceContext, 'Network', 'XClientIp') as IpAddress,
                     JSONExtractString(DeviceContext, 'Network', 'OperatorName') as Carrier,
                     JSONExtractString(DeviceContext, 'Application', 'InstallTimestamp') as InstallTime
-                FROM ch_frauddetection.Sessions
+                FROM Sessions
                 WHERE JSONExtractString(MetaData, 'userId') = @UserId
                   AND MetaData != ''
                   AND CreatedAt >= @From30Days
@@ -261,7 +256,7 @@ public class ClickHouseService
                     '-',
                     JSONExtractString(DeviceContext, 'Network', 'Mnc')
                 ) as Location
-            FROM ch_frauddetection.Sessions
+            FROM Sessions
             WHERE JSONExtractString(MetaData, 'userId') = @UserId
               AND MetaData != ''
               AND CreatedAt >= @From7Days
@@ -363,7 +358,7 @@ public class ClickHouseService
 
         // Create table if not exists
         var createTableQuery = @"
-            CREATE TABLE IF NOT EXISTS ch_frauddetection.FraudAnalysisResults
+            CREATE TABLE IF NOT EXISTS FraudAnalysisResults
             (
                 SessionId String,
                 ProfileId String,
@@ -390,7 +385,7 @@ public class ClickHouseService
 
         // Insert result
         var insertQuery = @"
-            INSERT INTO ch_frauddetection.FraudAnalysisResults VALUES
+            INSERT INTO FraudAnalysisResults VALUES
             (@SessionId, @ProfileId, @DeviceKey, @GlobalDeviceId, @UserId, @PhoneNumber,
              @AnalyzedAt, @AnomalyScore, @IsAnomaly, @ClusterId, @RiskLevel,
              @IsMultiAccounting, @IsMultiDevicing, @IsAccountTakeover, @IsImpossibleTravel,
@@ -433,7 +428,7 @@ public class ClickHouseService
                 AnalyzedAt, AnomalyScore, IsAnomaly, ClusterId, RiskLevel,
                 IsMultiAccounting, IsMultiDevicing, IsAccountTakeover, IsImpossibleTravel,
                 SuspiciousReasons, Features
-            FROM ch_frauddetection.FraudAnalysisResults
+            FROM FraudAnalysisResults
             WHERE AnalyzedAt >= @FromDate AND AnalyzedAt < @ToDate
             ORDER BY AnomalyScore DESC";
 
@@ -478,7 +473,7 @@ public class ClickHouseService
                     min(AnalyzedAt) as FirstSeen,
                     max(AnalyzedAt) as LastSeen,
                     avg(AnomalyScore) as AvgScore
-                FROM ch_frauddetection.FraudAnalysisResults
+                FROM FraudAnalysisResults
                 WHERE AnalyzedAt >= @FromDate
                   AND IsMultiAccounting = 1
                   AND UserId != ''
@@ -522,7 +517,7 @@ public class ClickHouseService
                     avg(AnomalyScore) as AvgScore,
                     max(IsImpossibleTravel) as HasImpossibleTravel,
                     sum(IsImpossibleTravel) as GeographicJumps
-                FROM ch_frauddetection.FraudAnalysisResults
+                FROM FraudAnalysisResults
                 WHERE AnalyzedAt >= @FromDate
                   AND IsMultiDevicing = 1
                   AND UserId != ''
