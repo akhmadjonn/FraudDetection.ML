@@ -70,6 +70,14 @@ public class NotificationService
 
         sb.AppendLine($"{emoji} **{result.RiskLevel} RISK ALERT**");
         sb.AppendLine();
+
+        // Highlight NEW fraud patterns at the top
+        if (newFraudTypes != null && newFraudTypes.Any())
+        {
+            sb.AppendLine($"🆕 **NEW FRAUD PATTERN DETECTED:** {string.Join(", ", newFraudTypes.Select(GetDisplayName))}");
+            sb.AppendLine();
+        }
+
         sb.AppendLine("**Session Details:**");
         sb.AppendLine($"• Session: `{result.SessionId}`");
         sb.AppendLine($"• User: {result.PhoneNumber}");
@@ -78,55 +86,67 @@ public class NotificationService
         sb.AppendLine($"• Cluster: {result.ClusterId}");
         sb.AppendLine();
 
-        // Fraud Types
+        // Build list of all fraud types (main + pattern-based)
         var allFraudTypes = new List<string>();
-        if (result.IsMultiAccounting) allFraudTypes.Add("Multi-Accounting");
-        if (result.IsMultiDevicing) allFraudTypes.Add("Multi-Devicing");
-        if (result.IsAccountTakeover) allFraudTypes.Add("Account Takeover");
-        if (result.IsImpossibleTravel) allFraudTypes.Add("Impossible Travel");
+
+        // Main types
+        if (result.IsMultiAccounting) allFraudTypes.Add("MultiAccounting");
+        if (result.IsMultiDevicing) allFraudTypes.Add("MultiDevicing");
+        if (result.IsAccountTakeover) allFraudTypes.Add("AccountTakeover");
+        if (result.IsImpossibleTravel) allFraudTypes.Add("ImpossibleTravel");
+
+        // Pattern-based types (from newFraudTypes if provided)
+        if (newFraudTypes != null)
+        {
+            foreach (var fraudType in newFraudTypes)
+            {
+                if (!allFraudTypes.Contains(fraudType) &&
+                    IsPatternBasedFraudType(fraudType))
+                {
+                    allFraudTypes.Add(fraudType);
+                }
+            }
+        }
 
         if (allFraudTypes.Any())
         {
             sb.AppendLine("**🎯 Fraud Types Detected:**");
 
-            // Highlight NEW fraud types
             if (newFraudTypes != null && newFraudTypes.Any())
             {
-                sb.AppendLine("**🆕 NEW PATTERNS DETECTED:**");
-                foreach (var type in newFraudTypes)
+                // Show NEW fraud types first
+                var newTypes = allFraudTypes.Where(ft => newFraudTypes.Contains(ft)).ToList();
+                if (newTypes.Any())
                 {
-                    var displayName = type switch
+                    sb.AppendLine("**NEW PATTERNS:**");
+                    foreach (var type in newTypes)
                     {
-                        "MultiAccounting" => "Multi-Accounting",
-                        "MultiDevicing" => "Multi-Devicing",
-                        "AccountTakeover" => "Account Takeover",
-                        "ImpossibleTravel" => "Impossible Travel",
-                        _ => type
-                    };
-                    sb.AppendLine($"• ⚡ **{displayName}** (NEW)");
+                        sb.AppendLine($"• ⚡ **{GetDisplayName(type)}**");
+                    }
+                    sb.AppendLine();
                 }
-                sb.AppendLine();
 
-                // Show other fraud types if any
-                var otherTypes = allFraudTypes.Where(ft =>
-                    !newFraudTypes.Any(nft => ft.Replace("-", "").Replace(" ", "") == nft)).ToList();
-                if (otherTypes.Any())
+                // Show previously detected types
+                var oldTypes = allFraudTypes.Where(ft => !newFraudTypes.Contains(ft)).ToList();
+                if (oldTypes.Any())
                 {
                     sb.AppendLine("**Previously Detected:**");
-                    foreach (var type in otherTypes)
+                    foreach (var type in oldTypes)
                     {
-                        sb.AppendLine($"• {type}");
+                        sb.AppendLine($"• {GetDisplayName(type)}");
                     }
+                    sb.AppendLine();
                 }
             }
             else
             {
+                // No highlighting, just show all types
                 foreach (var type in allFraudTypes)
                 {
-                    sb.AppendLine($"• {type}");
+                    sb.AppendLine($"• {GetDisplayName(type)}");
                 }
+                sb.AppendLine();
             }
-            sb.AppendLine();
         }
 
         sb.AppendLine("**🔍 Suspicious Indicators:**");
@@ -336,5 +356,33 @@ public class NotificationService
         {
             _logger.LogError(ex, "Failed to send Telegram notification");
         }
+    }
+
+    /// <summary>
+    /// Converts fraud type code to display name
+    /// </summary>
+    private string GetDisplayName(string fraudType)
+    {
+        return fraudType switch
+        {
+            "MultiAccounting" => "Multi-Accounting",
+            "MultiDevicing" => "Multi-Devicing",
+            "AccountTakeover" => "Account Takeover",
+            "ImpossibleTravel" => "Impossible Travel",
+            "OtpBruteforce" => "OTP Bruteforce",
+            "DeviceSpoofing" => "Device Spoofing",
+            "VpnUsage" => "VPN Usage",
+            "UnusualTiming" => "Unusual Timing",
+            "GeneralSuspicious" => "General Suspicious Activity",
+            _ => fraudType
+        };
+    }
+
+    /// <summary>
+    /// Checks if fraud type is pattern-based (not a main flag)
+    /// </summary>
+    private bool IsPatternBasedFraudType(string fraudType)
+    {
+        return fraudType is "OtpBruteforce" or "DeviceSpoofing" or "VpnUsage" or "UnusualTiming" or "GeneralSuspicious";
     }
 }
