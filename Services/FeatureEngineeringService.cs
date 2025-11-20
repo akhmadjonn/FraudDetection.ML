@@ -45,7 +45,7 @@ public class FeatureEngineeringService
 
             // Get multi-devicing history (only if we have userId)
             var multiDevicingHistory = new MultiDevicingHistory();
-            if (metaData.IsValid && !string.IsNullOrWhiteSpace(metaData.UserId))
+            if (metaData.IsValid && !string.IsNullOrWhiteSpace(metaData.UserId) && metaData.UserId != "null")
             {
                 multiDevicingHistory = await _clickHouse.GetMultiDevicingHistoryAsync(
                     metaData.UserId);
