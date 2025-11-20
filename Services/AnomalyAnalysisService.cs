@@ -153,9 +153,9 @@ public class AnomalyAnalysisService
         return new FraudAnalysisResult
         {
             SessionId = features.SessionId,
-            ProfileId = features.ProfileId,
+            ProfileId = !string.IsNullOrEmpty(features.ProfileId) ? Guid.Parse(features.ProfileId) : (Guid?)null,
             DeviceKey = features.DeviceKey,
-            GlobalDeviceId = features.GlobalDeviceId,
+            GlobalDeviceId = Guid.Parse(features.GlobalDeviceId),
             UserId = features.UserId,
             PhoneNumber = features.PhoneNumber,
             AnalyzedAt = DateTime.UtcNow,

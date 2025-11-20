@@ -54,11 +54,11 @@ public class FeatureEngineeringService
             // Build features
             var features = new FraudFeatures
             {
-                // Identifiers
+                // Identifiers (convert Guid types to string for ML.NET compatibility)
                 SessionId = session.SessionId,
-                ProfileId = session.ProfileId,
+                ProfileId = session.ProfileId?.ToString() ?? string.Empty,
                 DeviceKey = session.DeviceKey,
-                GlobalDeviceId = session.GlobalDeviceId,
+                GlobalDeviceId = session.GlobalDeviceId.ToString(),
                 UserId = metaData.UserId,
                 PhoneNumber = metaData.PhoneNumber,
 
