@@ -19,6 +19,7 @@ builder.Services.AddSingleton<IsolationForestService>();
 builder.Services.AddSingleton<ClusteringService>();
 builder.Services.AddSingleton<AnomalyAnalysisService>();
 builder.Services.AddSingleton<NotificationService>();
+builder.Services.AddSingleton<AlertHistoryService>();
 builder.Services.AddHttpClient();
 
 // Register Background Jobs
@@ -41,6 +42,11 @@ logger.LogInformation("═══════════════════
 logger.LogInformation("Environment: {Environment}", builder.Environment.EnvironmentName);
 logger.LogInformation("Models Directory: {ModelsDirectory}", modelsDir);
 
+// Initialize AlertHistory table
+logger.LogInformation("Initializing AlertHistory table...");
+var alertHistoryService = host.Services.GetRequiredService<AlertHistoryService>();
+await alertHistoryService.InitializeAsync();
+logger.LogInformation("AlertHistory table initialized successfully");
 
 try
 {

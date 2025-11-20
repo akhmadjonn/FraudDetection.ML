@@ -24,9 +24,9 @@ public class NotificationService
         _telegramChatId = config["Notifications:TelegramChatId"];
     }
 
-    public async Task SendAlertAsync(FraudAnalysisResult result)
+    public async Task SendAlertAsync(FraudAnalysisResult result, List<string>? newFraudTypes = null)
     {
-        var message = FormatAlert(result);
+        var message = FormatAlert(result, newFraudTypes);
 
         // Send to Teams
         if (!string.IsNullOrEmpty(_teamsWebhookUrl))
@@ -56,7 +56,7 @@ public class NotificationService
         }
     }
 
-    private string FormatAlert(FraudAnalysisResult result)
+    private string FormatAlert(FraudAnalysisResult result, List<string>? newFraudTypes = null)
     {
         var sb = new StringBuilder();
 
@@ -79,18 +79,52 @@ public class NotificationService
         sb.AppendLine();
 
         // Fraud Types
-        var fraudTypes = new List<string>();
-        if (result.IsMultiAccounting) fraudTypes.Add("Multi-Accounting");
-        if (result.IsMultiDevicing) fraudTypes.Add("Multi-Devicing");
-        if (result.IsAccountTakeover) fraudTypes.Add("Account Takeover");
-        if (result.IsImpossibleTravel) fraudTypes.Add("Impossible Travel");
+        var allFraudTypes = new List<string>();
+        if (result.IsMultiAccounting) allFraudTypes.Add("Multi-Accounting");
+        if (result.IsMultiDevicing) allFraudTypes.Add("Multi-Devicing");
+        if (result.IsAccountTakeover) allFraudTypes.Add("Account Takeover");
+        if (result.IsImpossibleTravel) allFraudTypes.Add("Impossible Travel");
 
-        if (fraudTypes.Any())
+        if (allFraudTypes.Any())
         {
             sb.AppendLine("**🎯 Fraud Types Detected:**");
-            foreach (var type in fraudTypes)
+
+            // Highlight NEW fraud types
+            if (newFraudTypes != null && newFraudTypes.Any())
             {
-                sb.AppendLine($"• {type}");
+                sb.AppendLine("**🆕 NEW PATTERNS DETECTED:**");
+                foreach (var type in newFraudTypes)
+                {
+                    var displayName = type switch
+                    {
+                        "MultiAccounting" => "Multi-Accounting",
+                        "MultiDevicing" => "Multi-Devicing",
+                        "AccountTakeover" => "Account Takeover",
+                        "ImpossibleTravel" => "Impossible Travel",
+                        _ => type
+                    };
+                    sb.AppendLine($"• ⚡ **{displayName}** (NEW)");
+                }
+                sb.AppendLine();
+
+                // Show other fraud types if any
+                var otherTypes = allFraudTypes.Where(ft =>
+                    !newFraudTypes.Any(nft => ft.Replace("-", "").Replace(" ", "") == nft)).ToList();
+                if (otherTypes.Any())
+                {
+                    sb.AppendLine("**Previously Detected:**");
+                    foreach (var type in otherTypes)
+                    {
+                        sb.AppendLine($"• {type}");
+                    }
+                }
+            }
+            else
+            {
+                foreach (var type in allFraudTypes)
+                {
+                    sb.AppendLine($"• {type}");
+                }
             }
             sb.AppendLine();
         }

@@ -60,6 +60,7 @@ public class RealTimeScoringJob : BackgroundService
         var clustering = scope.ServiceProvider.GetRequiredService<ClusteringService>();
         var analysisService = scope.ServiceProvider.GetRequiredService<AnomalyAnalysisService>();
         var notification = scope.ServiceProvider.GetRequiredService<NotificationService>();
+        var alertHistory = scope.ServiceProvider.GetRequiredService<AlertHistoryService>();
 
         // Check if models are loaded
         if (!isolationForest.IsModelLoaded || !clustering.IsModelLoaded)
@@ -85,6 +86,7 @@ public class RealTimeScoringJob : BackgroundService
 
         var processedCount = 0;
         var alertCount = 0;
+        var throttledCount = 0;
 
         foreach (var session in newSessions)
         {
@@ -108,24 +110,44 @@ public class RealTimeScoringJob : BackgroundService
                     anomalyPrediction,
                     clusterPrediction);
 
-                // Save to database
+                // ALWAYS save to database (regardless of alert status)
                 await clickHouse.SaveAnalysisResultAsync(result);
 
                 processedCount++;
 
-                // Send alerts for high-risk sessions
+                // Check for high-risk sessions and apply fraud-type-aware throttling
                 if (result.RiskLevel is "CRITICAL" or "HIGH")
                 {
-                    await notification.SendAlertAsync(result);
-                    alertCount++;
+                    // Get NEW fraud types that haven't been alerted on recently
+                    var newFraudTypes = await alertHistory.GetNewFraudTypesAsync(result);
 
-                    _logger.LogWarning(
-                        "🚨 {RiskLevel} risk detected! Session: {SessionId}, User: {Phone}, Score: {Score:F2}, Reasons: {Reasons}",
-                        result.RiskLevel,
-                        result.SessionId,
-                        result.PhoneNumber,
-                        result.AnomalyScore,
-                        string.Join(", ", result.SuspiciousReasons.Take(2)));
+                    if (newFraudTypes.Any())
+                    {
+                        // Send alert for NEW fraud types
+                        await notification.SendAlertAsync(result, newFraudTypes);
+
+                        // Record that we sent this alert
+                        await alertHistory.RecordAlertAsync(result, newFraudTypes);
+
+                        alertCount++;
+
+                        _logger.LogWarning(
+                            "🚨 {RiskLevel} risk detected! Session: {SessionId}, User: {Phone}, Score: {Score:F2}, NEW Fraud Types: {FraudTypes}",
+                            result.RiskLevel,
+                            result.SessionId,
+                            result.PhoneNumber,
+                            result.AnomalyScore,
+                            string.Join(", ", newFraudTypes));
+                    }
+                    else
+                    {
+                        // All fraud types already alerted on - throttle this alert
+                        throttledCount++;
+
+                        _logger.LogDebug(
+                            "⏸️ Alert throttled for session {SessionId} - all fraud types already alerted within window",
+                            result.SessionId);
+                    }
                 }
             }
             catch (Exception ex)
@@ -137,10 +159,11 @@ public class RealTimeScoringJob : BackgroundService
         if (processedCount > 0)
         {
             _logger.LogInformation(
-                "Processed {Processed}/{Total} sessions. Alerts sent: {Alerts}",
+                "Processed {Processed}/{Total} sessions. Alerts sent: {Alerts}, Throttled: {Throttled}",
                 processedCount,
                 newSessions.Count,
-                alertCount);
+                alertCount,
+                throttledCount);
         }
 
         _lastProcessedTime = newSessions.Max(s => s.CreatedAt);
