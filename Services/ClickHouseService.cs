@@ -109,11 +109,11 @@ public class ClickHouseService
         // Get unique users and phone numbers for different time windows
         var query = @"
         WITH parsed_metadata AS (
-            SELECT 
+            SELECT
                 SessionId,
                 CreatedAt,
-                trim(replaceRegexpOne(arrayElement(extractAll(MetaData, 'userId["":\s]+([\w-]+)'), 1, ''), '[""'']', '')) as UserId,
-                trim(replaceRegexpOne(arrayElement(extractAll(MetaData, 'phoneNumber["":\s]+([\d]+)'), 1, ''), '[""'']', '')) as PhoneNumber,
+                trim(replaceRegexpOne(extract(MetaData, 'userId["":\s]+([\w-]+)'), '[""'']', '')) as UserId,
+                trim(replaceRegexpOne(extract(MetaData, 'phoneNumber["":\s]+([\d]+)'), '[""'']', '')) as PhoneNumber,
                 DeviceContext
             FROM Sessions
             WHERE GlobalDeviceId = @GlobalDeviceId
@@ -121,7 +121,7 @@ public class ClickHouseService
               AND MetaData != 'null'
               AND CreatedAt >= @From30Days
         )
-        SELECT 
+        SELECT
             uniqExact(UserId) as TotalUniqueUsers,
             uniqExactIf(UserId, CreatedAt >= @From24Hours) as UniqueUserIds_24h,
             uniqExactIf(UserId, CreatedAt >= @From7Days) as UniqueUserIds_7d,
@@ -143,9 +143,9 @@ public class ClickHouseService
         // Get user behavior patterns
         var behaviorQuery = @"
         WITH parsed_metadata AS (
-            SELECT 
+            SELECT
                 s.SessionId,
-                trim(replaceRegexpOne(arrayElement(extractAll(s.MetaData, 'userId["":\s]+([\w-]+)'), 1, ''), '[""'']', '')) as UserId,
+                trim(replaceRegexpOne(extract(s.MetaData, 'userId["":\s]+([\w-]+)'), '[""'']', '')) as UserId,
                 s.CreatedAt
             FROM Sessions s
             WHERE s.GlobalDeviceId = @GlobalDeviceId
@@ -178,7 +178,7 @@ public class ClickHouseService
         var switchQuery = @"
         WITH extracted_users AS (
             SELECT DISTINCT
-                trim(replaceRegexpOne(arrayElement(extractAll(MetaData, 'userId["":\s]+([\w-]+)'), 1, ''), '[""'']', '')) as UserId
+                trim(replaceRegexpOne(extract(MetaData, 'userId["":\s]+([\w-]+)'), '[""'']', '')) as UserId
             FROM Sessions
             WHERE GlobalDeviceId = @GlobalDeviceId
               AND MetaData != ''
@@ -222,7 +222,7 @@ public class ClickHouseService
         // Get device counts and changes
         var query = @"
             WITH user_sessions AS (
-                SELECT 
+                SELECT
                     SessionId,
                     GlobalDeviceId,
                     DeviceKey,
@@ -231,7 +231,7 @@ public class ClickHouseService
                     JSONExtractString(DeviceContext, 'Network', 'OperatorName') as Carrier,
                     JSONExtractString(DeviceContext, 'Application', 'InstallTimestamp') as InstallTime
                 FROM Sessions
-                WHERE trim(replaceRegexpOne(arrayElement(extractAll(MetaData, 'userId["":\s]+([\w-]+)'), 1, ''), '[""'']', '')) = @UserId
+                WHERE trim(replaceRegexpOne(extract(MetaData, 'userId["":\s]+([\w-]+)'), '[""'']', '')) = @UserId
                   AND MetaData != ''
                   AND MetaData != 'null'
                   AND CreatedAt >= @From30Days
@@ -268,7 +268,7 @@ public class ClickHouseService
                     JSONExtractString(DeviceContext, 'Network', 'Mnc')
                 ) as Location
             FROM Sessions
-            WHERE trim(replaceRegexpOne(arrayElement(extractAll(MetaData, 'userId["":\s]+([\w-]+)'), 1, ''), '[""'']', '')) = @UserId
+            WHERE trim(replaceRegexpOne(extract(MetaData, 'userId["":\s]+([\w-]+)'), '[""'']', '')) = @UserId
               AND MetaData != ''
               AND MetaData != 'null'
               AND CreatedAt >= @From7Days
