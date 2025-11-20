@@ -14,10 +14,13 @@ namespace FraudDetection.ML.Models;
 public class FraudFeatures
 {
     // ==================== IDENTIFIERS (Not used in ML) ====================
+    // Note: Even though these don't have [LoadColumn] attributes and aren't used for training,
+    // ML.NET still needs to create a schema for them. Guid types are not supported by ML.NET,
+    // so we use string. These are converted from Guid in FeatureEngineeringService.
     public string SessionId { get; set; } = string.Empty;
-    public Guid? ProfileId { get; set; }  // Nullable - not always present
+    public string ProfileId { get; set; } = string.Empty;  // Converted from Guid?
     public string DeviceKey { get; set; } = string.Empty;
-    public Guid GlobalDeviceId { get; set; }
+    public string GlobalDeviceId { get; set; } = string.Empty;  // Converted from Guid
     public string UserId { get; set; } = string.Empty;
     public string PhoneNumber { get; set; } = string.Empty;
 
