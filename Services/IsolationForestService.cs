@@ -138,12 +138,9 @@ public class IsolationForestService
 
             _logger.LogInformation("Isolation Forest model trained and saved to {Path}", _modelPath);
 
-            // Log some statistics
-            var predictions = _model.Transform(dataView);
-            var metrics = _mlContext.AnomalyDetection.Evaluate(predictions);
-            _logger.LogInformation("Model Metrics - AUC: {AUC:F4}, Detection Rate: {DR:F4}",
-                metrics.AreaUnderRocCurve,
-                metrics.DetectionRateAtFalsePositiveCount);
+            // Note: Cannot evaluate unsupervised anomaly detection model without labeled data
+            // Evaluation requires a "Label" column with ground truth, which we don't have
+            // The model performance will be assessed through real-world usage and monitoring
         });
     }
 
