@@ -124,12 +124,35 @@ public class FeatureEngineeringService
                 SuspiciousVelocityFlag = multiDevicingHistory.HasImpossibleTravel ? 1f : 0f
             };
 
+            // CRITICAL: Validate all features to prevent NaN/Infinity
+            ValidateAndCleanFeatures(features);
+
             return features;
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error extracting features for session {SessionId}", session.SessionId);
             return null;
+        }
+    }
+
+    // ==================== VALIDATION ====================
+
+    private void ValidateAndCleanFeatures(FraudFeatures features)
+    {
+        var properties = typeof(FraudFeatures).GetProperties()
+            .Where(p => p.PropertyType == typeof(float));
+
+        foreach (var prop in properties)
+        {
+            var value = (float)prop.GetValue(features)!;
+
+            if (float.IsNaN(value) || float.IsInfinity(value))
+            {
+                _logger.LogWarning("Feature {FeatureName} has invalid value {Value} for session {SessionId}, setting to 0",
+                    prop.Name, value, features.SessionId);
+                prop.SetValue(features, 0f);
+            }
         }
     }
 
@@ -183,7 +206,20 @@ public class FeatureEngineeringService
 
     private float SafeDivide(float numerator, float denominator)
     {
-        return denominator > 0 ? numerator / denominator : 0f;
+        // Check for invalid inputs
+        if (float.IsNaN(numerator) || float.IsInfinity(numerator))
+            return 0f;
+
+        if (float.IsNaN(denominator) || float.IsInfinity(denominator) || denominator == 0)
+            return 0f;
+
+        var result = numerator / denominator;
+
+        // Check if result is valid
+        if (float.IsNaN(result) || float.IsInfinity(result))
+            return 0f;
+
+        return result;
     }
 
     // ==================== EVENT COUNTING ====================

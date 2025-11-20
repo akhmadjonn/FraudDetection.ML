@@ -154,7 +154,18 @@ public class IsolationForestService
 
         try
         {
-            return _predictionEngine.Predict(features);
+            var prediction = _predictionEngine.Predict(features);
+
+            // Validate the prediction score
+            if (float.IsNaN(prediction.AnomalyScore) || float.IsInfinity(prediction.AnomalyScore))
+            {
+                _logger.LogWarning("Model returned invalid AnomalyScore {Score} for session {SessionId}, setting to 0",
+                    prediction.AnomalyScore, features.SessionId);
+                prediction.AnomalyScore = 0f;
+                prediction.IsAnomaly = false;
+            }
+
+            return prediction;
         }
         catch (Exception ex)
         {

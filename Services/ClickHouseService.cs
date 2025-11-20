@@ -394,6 +394,14 @@ public class ClickHouseService
 
     public async Task SaveAnalysisResultAsync(FraudAnalysisResult result)
     {
+        // Validate AnomalyScore before saving
+        if (float.IsNaN(result.AnomalyScore) || float.IsInfinity(result.AnomalyScore))
+        {
+            _logger.LogWarning("AnomalyScore is invalid ({Score}) for session {SessionId}, setting to 0",
+                result.AnomalyScore, result.SessionId);
+            result.AnomalyScore = 0f;
+        }
+
         using var connection = new ClickHouseConnection(_connectionString);
         await connection.OpenAsync();
 
