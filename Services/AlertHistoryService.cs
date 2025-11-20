@@ -235,6 +235,75 @@ public class AlertHistoryService
             ImpossibleTravelAlerts = Convert.ToInt32(result?.ImpossibleTravelAlerts ?? 0)
         };
     }
+
+    /// <summary>
+    /// Gets recent alerts for warming up in-memory cache (used by HybridAlertService)
+    /// </summary>
+    public async Task<List<AlertWarmupEntry>> GetRecentAlertsForWarmupAsync(TimeSpan lookbackWindow)
+    {
+        using var connection = new ClickHouseConnection(_connectionString);
+        await connection.OpenAsync();
+
+        var cutoffTime = DateTime.UtcNow - lookbackWindow;
+
+        var query = @"
+            SELECT DISTINCT
+                SessionId,
+                DeviceKey,
+                UserId,
+                RiskLevel,
+                SentAt,
+                ThrottleKey
+            FROM AlertHistory
+            WHERE SentAt >= @CutoffTime
+            ORDER BY SentAt DESC";
+
+        var results = await connection.QueryAsync<dynamic>(
+            query,
+            new { CutoffTime = cutoffTime });
+
+        return results.Select(r => new AlertWarmupEntry
+        {
+            SessionId = r.SessionId,
+            DeviceKey = r.DeviceKey,
+            UserId = r.UserId ?? string.Empty,
+            RiskLevel = r.RiskLevel,
+            SentAt = r.SentAt,
+            ThrottleKey = r.ThrottleKey,
+            // Extract fraud type from throttle key (format: "device:xyz:CRITICAL:FraudType")
+            FraudType = ExtractFraudTypeFromThrottleKey(r.ThrottleKey)
+        }).ToList();
+    }
+
+    /// <summary>
+    /// Extracts fraud type from throttle key
+    /// </summary>
+    private string ExtractFraudTypeFromThrottleKey(string throttleKey)
+    {
+        try
+        {
+            var parts = throttleKey.Split(':');
+            return parts.Length >= 4 ? parts[3] : "Unknown";
+        }
+        catch
+        {
+            return "Unknown";
+        }
+    }
+}
+
+/// <summary>
+/// Alert warmup entry for cache initialization
+/// </summary>
+public class AlertWarmupEntry
+{
+    public string SessionId { get; set; } = string.Empty;
+    public string DeviceKey { get; set; } = string.Empty;
+    public string UserId { get; set; } = string.Empty;
+    public string RiskLevel { get; set; } = string.Empty;
+    public string FraudType { get; set; } = string.Empty;
+    public DateTime SentAt { get; set; }
+    public string ThrottleKey { get; set; } = string.Empty;
 }
 
 /// <summary>

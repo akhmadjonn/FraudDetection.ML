@@ -20,6 +20,7 @@ builder.Services.AddSingleton<ClusteringService>();
 builder.Services.AddSingleton<AnomalyAnalysisService>();
 builder.Services.AddSingleton<NotificationService>();
 builder.Services.AddSingleton<AlertHistoryService>();
+builder.Services.AddSingleton<HybridAlertService>();
 builder.Services.AddHttpClient();
 
 // Register Background Jobs
@@ -47,6 +48,12 @@ logger.LogInformation("Initializing AlertHistory table...");
 var alertHistoryService = host.Services.GetRequiredService<AlertHistoryService>();
 await alertHistoryService.InitializeAsync();
 logger.LogInformation("AlertHistory table initialized successfully");
+
+// Initialize HybridAlertService (warm up cache from database)
+logger.LogInformation("Initializing HybridAlertService...");
+var hybridAlertService = host.Services.GetRequiredService<HybridAlertService>();
+await hybridAlertService.InitializeAsync();
+logger.LogInformation("HybridAlertService initialized successfully");
 
 try
 {

@@ -60,7 +60,7 @@ public class RealTimeScoringJob : BackgroundService
         var clustering = scope.ServiceProvider.GetRequiredService<ClusteringService>();
         var analysisService = scope.ServiceProvider.GetRequiredService<AnomalyAnalysisService>();
         var notification = scope.ServiceProvider.GetRequiredService<NotificationService>();
-        var alertHistory = scope.ServiceProvider.GetRequiredService<AlertHistoryService>();
+        var hybridAlert = scope.ServiceProvider.GetRequiredService<HybridAlertService>();
 
         // Check if models are loaded
         if (!isolationForest.IsModelLoaded || !clustering.IsModelLoaded)
@@ -118,35 +118,36 @@ public class RealTimeScoringJob : BackgroundService
                 // Check for high-risk sessions and apply fraud-type-aware throttling
                 if (result.RiskLevel is "CRITICAL" or "HIGH")
                 {
-                    // Get NEW fraud types that haven't been alerted on recently
-                    var newFraudTypes = await alertHistory.GetNewFraudTypesAsync(result);
+                    // Use hybrid service to determine if alert should be sent
+                    var decision = await hybridAlert.ShouldSendAlertAsync(result);
 
-                    if (newFraudTypes.Any())
+                    if (decision.ShouldSend)
                     {
-                        // Send alert for NEW fraud types
-                        await notification.SendAlertAsync(result, newFraudTypes);
-
-                        // Record that we sent this alert
-                        await alertHistory.RecordAlertAsync(result, newFraudTypes);
+                        // Send alert highlighting NEW fraud types
+                        await notification.SendAlertAsync(result, decision.FraudTypesToAlert);
 
                         alertCount++;
 
                         _logger.LogWarning(
-                            "🚨 {RiskLevel} risk detected! Session: {SessionId}, User: {Phone}, Score: {Score:F2}, NEW Fraud Types: {FraudTypes}",
+                            "🚨 {RiskLevel} alert sent! Session: {SessionId}, User: {Phone}, Score: {Score:F2}, NEW Fraud Types: {FraudTypes}, Reason: {Reason}",
                             result.RiskLevel,
                             result.SessionId,
                             result.PhoneNumber,
                             result.AnomalyScore,
-                            string.Join(", ", newFraudTypes));
+                            string.Join(", ", decision.FraudTypesToAlert),
+                            decision.Reason);
                     }
                     else
                     {
-                        // All fraud types already alerted on - throttle this alert
+                        // All fraud types already alerted on - throttled
                         throttledCount++;
 
                         _logger.LogDebug(
-                            "⏸️ Alert throttled for session {SessionId} - all fraud types already alerted within window",
-                            result.SessionId);
+                            "⏸️ Alert throttled for session {SessionId}. Reason: {Reason}. Detected: {All}, Throttled: {Throttled}",
+                            result.SessionId,
+                            decision.Reason,
+                            string.Join(", ", decision.AllDetectedFraudTypes),
+                            string.Join(", ", decision.ThrottledFraudTypes));
                     }
                 }
             }
