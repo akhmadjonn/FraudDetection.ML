@@ -4,8 +4,8 @@ public class SessionRecord
 {
     public Guid Id { get; set; }
     public string SessionId { get; set; } = string.Empty;
-    public Guid GlobalId { get; set; } 
-    public Guid GlobalDeviceId { get; set; } 
+    public Guid? GlobalId { get; set; }  // Nullable - not always present
+    public Guid GlobalDeviceId { get; set; }
     public string DeviceContext { get; set; } = string.Empty;
     public string Type { get; set; } = string.Empty;
     public DateTime CreatedAt { get; set; }
@@ -13,18 +13,17 @@ public class SessionRecord
     public string DeviceKey { get; set; } = string.Empty;
     public string AppSetId { get; set; } = string.Empty;
     public string MetaData { get; set; } = string.Empty;
-    public Guid ProfileId { get; set; } 
+    public Guid? ProfileId { get; set; }  // Nullable - not always coming from client
 }
 
 public class EventRecord
 {
-    public string Id { get; set; } = string.Empty;
+    public Guid Id { get; set; }  // UUID in ClickHouse
     public string SessionId { get; set; } = string.Empty;
     public string EventName { get; set; } = string.Empty;
     public string EventType { get; set; } = string.Empty;
-    public DateTime EventTime { get; set; }
     public string EventParams { get; set; } = string.Empty;
-    public DateTime CreatedAt { get; set; }
+    public DateTime CreatedAt { get; set; }  // Using CreatedAt instead of EventTime
 }
 
 public class MetaDataInfo
@@ -85,7 +84,7 @@ public class UserBehaviorPattern
 public class DeviceLoginInfo
 {
     public string DeviceKey { get; set; } = string.Empty;
-    public string GlobalDeviceId { get; set; } = string.Empty;
+    public Guid GlobalDeviceId { get; set; }  // UUID in ClickHouse
     public DateTime LoginTime { get; set; }
     public string IpAddress { get; set; } = string.Empty;
     public string Carrier { get; set; } = string.Empty;
