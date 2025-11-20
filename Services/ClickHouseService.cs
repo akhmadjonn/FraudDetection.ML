@@ -250,8 +250,8 @@ public class ClickHouseService
 
         // Get recent device logins for geographic analysis
         var deviceQuery = @"
-            SELECT 
-                GlobalDeviceId as DeviceKey,
+            SELECT
+                DeviceKey,
                 GlobalDeviceId,
                 CreatedAt as LoginTime,
                 JSONExtractString(DeviceContext, 'Network', 'XClientIp') as IpAddress,
@@ -262,8 +262,9 @@ public class ClickHouseService
                     JSONExtractString(DeviceContext, 'Network', 'Mnc')
                 ) as Location
             FROM Sessions
-            WHERE JSONExtractString(MetaData, 'userId') = @UserId
+            WHERE trim(replaceRegexpOne(extractAll(MetaData, 'userId["":\s]+([\w-]+)')[1], '[""'']', '')) = @UserId
               AND MetaData != ''
+              AND MetaData != 'null'
               AND CreatedAt >= @From7Days
             ORDER BY CreatedAt DESC
             LIMIT 20";
