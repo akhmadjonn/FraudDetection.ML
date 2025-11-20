@@ -47,21 +47,26 @@ public class Device
 public class Security
 {
     [JsonPropertyName("RootStatus")]
+    [JsonConverter(typeof(BooleanConverter))]
     public bool RootStatus { get; set; }
 
     [JsonPropertyName("EmulatorStatus")]
+    [JsonConverter(typeof(BooleanConverter))]
     public bool EmulatorStatus { get; set; }
 
     [JsonPropertyName("CloneStatus")]
+    [JsonConverter(typeof(BooleanConverter))]
     public bool CloneStatus { get; set; }
 }
 
 public class Network
 {
     [JsonPropertyName("VpnStatus")]
+    [JsonConverter(typeof(BooleanConverter))]
     public bool VpnStatus { get; set; }
 
     [JsonPropertyName("RoamingStatus")]
+    [JsonConverter(typeof(BooleanConverter))]
     public bool RoamingStatus { get; set; }
 
     [JsonPropertyName("ConnectionType")]
