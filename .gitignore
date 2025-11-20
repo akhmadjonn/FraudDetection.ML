@@ -361,3 +361,31 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+
+# ==================== SENSITIVE FILES ====================
+# Configuration files with sensitive data (connection strings, API keys, etc.)
+appsettings.Development.json
+appsettings.Local.json
+appsettings.*.json
+!appsettings.json
+!appsettings.Production.json
+
+# Secrets
+secrets.json
+*.secrets.json
+
+# Environment files
+.env
+.env.local
+.env.development
+.env.production
+
+# ML Models (can be large and might contain training data)
+Models/*.zip
+Models/*.pkl
+Models/*.model
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
