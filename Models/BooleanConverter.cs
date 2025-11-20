@@ -9,6 +9,7 @@ namespace FraudDetection.ML.Models;
 /// - 0/1 (numbers)
 /// - "true"/"false" (strings)
 /// - "0"/"1" (string numbers)
+/// - null (returns false)
 /// </summary>
 public class BooleanConverter : JsonConverter<bool>
 {
@@ -20,11 +21,14 @@ public class BooleanConverter : JsonConverter<bool>
                 return true;
             case JsonTokenType.False:
                 return false;
+            case JsonTokenType.Null:
+                // Treat null as false
+                return false;
             case JsonTokenType.Number:
                 return reader.GetInt32() != 0;
             case JsonTokenType.String:
                 var stringValue = reader.GetString();
-                if (string.IsNullOrEmpty(stringValue))
+                if (string.IsNullOrEmpty(stringValue) || stringValue.ToLower() == "null")
                     return false;
 
                 // Handle "true"/"false" strings
