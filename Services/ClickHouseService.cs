@@ -112,8 +112,8 @@ public class ClickHouseService
             SELECT 
                 SessionId,
                 CreatedAt,
-                JSONExtractString(MetaData, 'userId') as UserId,
-                JSONExtractString(MetaData, 'phoneNumber') as PhoneNumber,
+                trim(replaceRegexpOne(arrayElement(extractAll(MetaData, 'userId["":\s]+([\w-]+)'), 1, ''), '[""'']', '')) as UserId,
+                trim(replaceRegexpOne(arrayElement(extractAll(MetaData, 'phoneNumber["":\s]+([\d]+)'), 1, ''), '[""'']', '')) as PhoneNumber,
                 DeviceContext
             FROM Sessions
             WHERE GlobalDeviceId = @GlobalDeviceId
@@ -145,7 +145,7 @@ public class ClickHouseService
         WITH parsed_metadata AS (
             SELECT 
                 s.SessionId,
-                JSONExtractString(s.MetaData, 'userId') as UserId,
+                trim(replaceRegexpOne(arrayElement(extractAll(s.MetaData, 'userId["":\s]+([\w-]+)'), 1, ''), '[""'']', '')) as UserId,
                 s.CreatedAt
             FROM Sessions s
             WHERE s.GlobalDeviceId = @GlobalDeviceId
@@ -176,14 +176,19 @@ public class ClickHouseService
 
         // Calculate user switches - Using simplified approach
         var switchQuery = @"
-        SELECT COUNT(DISTINCT JSONExtractString(MetaData, 'userId')) - 1 as Switches
-        FROM Sessions
-        WHERE GlobalDeviceId = @GlobalDeviceId
-          AND MetaData != ''
-          AND MetaData != 'null'
-          AND JSONExtractString(MetaData, 'userId') != ''
-          AND CreatedAt >= @From7Days
-        HAVING COUNT(DISTINCT JSONExtractString(MetaData, 'userId')) > 1";
+        WITH extracted_users AS (
+            SELECT DISTINCT
+                trim(replaceRegexpOne(arrayElement(extractAll(MetaData, 'userId["":\s]+([\w-]+)'), 1, ''), '[""'']', '')) as UserId
+            FROM Sessions
+            WHERE GlobalDeviceId = @GlobalDeviceId
+              AND MetaData != ''
+              AND MetaData != 'null'
+              AND CreatedAt >= @From7Days
+        )
+        SELECT COUNT(*) - 1 as Switches
+        FROM extracted_users
+        WHERE UserId != '' AND UserId != 'null'
+        HAVING COUNT(*) > 1";
 
         var switches = await connection.QueryFirstOrDefaultAsync<int?>(
             switchQuery,
@@ -226,8 +231,9 @@ public class ClickHouseService
                     JSONExtractString(DeviceContext, 'Network', 'OperatorName') as Carrier,
                     JSONExtractString(DeviceContext, 'Application', 'InstallTimestamp') as InstallTime
                 FROM Sessions
-                WHERE JSONExtractString(MetaData, 'userId') = @UserId
+                WHERE trim(replaceRegexpOne(arrayElement(extractAll(MetaData, 'userId["":\s]+([\w-]+)'), 1, ''), '[""'']', '')) = @UserId
                   AND MetaData != ''
+                  AND MetaData != 'null'
                   AND CreatedAt >= @From30Days
             )
             SELECT 
@@ -262,7 +268,7 @@ public class ClickHouseService
                     JSONExtractString(DeviceContext, 'Network', 'Mnc')
                 ) as Location
             FROM Sessions
-            WHERE trim(replaceRegexpOne(extractAll(MetaData, 'userId["":\s]+([\w-]+)')[1], '[""'']', '')) = @UserId
+            WHERE trim(replaceRegexpOne(arrayElement(extractAll(MetaData, 'userId["":\s]+([\w-]+)'), 1, ''), '[""'']', '')) = @UserId
               AND MetaData != ''
               AND MetaData != 'null'
               AND CreatedAt >= @From7Days
