@@ -44,8 +44,17 @@ public class IsolationForestService
                 return;
             }
 
+            // Create schema definition to exclude identifier properties that ML.NET can't handle
+            var schemaDefinition = Microsoft.ML.Data.SchemaDefinition.Create(typeof(FraudFeatures));
+            schemaDefinition["SessionId"].ColumnType = null;  // Exclude from schema
+            schemaDefinition["ProfileId"].ColumnType = null;  // Exclude Guid? (not supported)
+            schemaDefinition["DeviceKey"].ColumnType = null;  // Exclude from schema
+            schemaDefinition["GlobalDeviceId"].ColumnType = null;  // Exclude from schema
+            schemaDefinition["UserId"].ColumnType = null;  // Exclude from schema
+            schemaDefinition["PhoneNumber"].ColumnType = null;  // Exclude from schema
+
             // Convert to IDataView
-            var dataView = _mlContext.Data.LoadFromEnumerable(trainingData);
+            var dataView = _mlContext.Data.LoadFromEnumerable(trainingData, schemaDefinition);
 
             // Define all feature columns (exclude identifiers)
             var featureColumns = new[]
