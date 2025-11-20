@@ -76,7 +76,7 @@ public class ClickHouseService
         await connection.OpenAsync();
 
         var query = @"
-            SELECT 
+            SELECT
                 COUNT(DISTINCT SessionId) as TotalSessions,
                 COUNT(DISTINCT JSONExtractString(DeviceContext, 'Network', 'XClientIp')) as UniqueIpCount,
                 COUNT(DISTINCT JSONExtractString(DeviceContext, 'Network', 'OperatorName')) as DifferentCarrierCount
@@ -84,11 +84,16 @@ public class ClickHouseService
             WHERE GlobalDeviceId = @GlobalDeviceId
               AND CreatedAt >= @FromDate";
 
-        var history = await connection.QueryFirstOrDefaultAsync<DeviceHistory>(
+        var result = await connection.QueryFirstOrDefaultAsync<dynamic>(
             query,
             new { GlobalDeviceId = globalDeviceId, FromDate = fromDate });
 
-        return history ?? new DeviceHistory();
+        return new DeviceHistory
+        {
+            TotalSessions = Convert.ToInt32(result?.TotalSessions ?? 0),
+            UniqueIpCount = Convert.ToInt32(result?.UniqueIpCount ?? 0),
+            DifferentCarrierCount = Convert.ToInt32(result?.DifferentCarrierCount ?? 0)
+        };
     }
 
     // ==================== MULTI-ACCOUNTING QUERIES ====================
@@ -186,12 +191,12 @@ public class ClickHouseService
 
         return new MultiAccountingHistory
         {
-            UniqueUserIds_24h = (int)(result?.UniqueUserIds_24h ?? 0),
-            UniqueUserIds_7d = (int)(result?.UniqueUserIds_7d ?? 0),
-            UniqueUserIds_30d = (int)(result?.UniqueUserIds_30d ?? 0),
-            UniquePhoneNumbers_7d = (int)(result?.UniquePhoneNumbers_7d ?? 0),
-            NewUsers_24h = (int)(result?.NewUsers_24h ?? 0),
-            NewUsers_7d = (int)(result?.NewUsers_7d ?? 0),
+            UniqueUserIds_24h = Convert.ToInt32(result?.UniqueUserIds_24h ?? 0),
+            UniqueUserIds_7d = Convert.ToInt32(result?.UniqueUserIds_7d ?? 0),
+            UniqueUserIds_30d = Convert.ToInt32(result?.UniqueUserIds_30d ?? 0),
+            UniquePhoneNumbers_7d = Convert.ToInt32(result?.UniquePhoneNumbers_7d ?? 0),
+            NewUsers_24h = Convert.ToInt32(result?.NewUsers_24h ?? 0),
+            NewUsers_7d = Convert.ToInt32(result?.NewUsers_7d ?? 0),
             UserSwitches = switches,
             UserBehaviors = behaviors.ToList()
         };
@@ -274,13 +279,13 @@ public class ClickHouseService
 
         return new MultiDevicingHistory
         {
-            UniqueDevices_24h = result?.UniqueDevices_24h ?? 0,
-            UniqueDevices_7d = result?.UniqueDevices_7d ?? 0,
-            UniqueDevices_30d = result?.UniqueDevices_30d ?? 0,
-            TotalDevicesEverUsed = result?.TotalDevicesEverUsed ?? 0,
-            IpChanges_24h = result?.IpChanges_24h ?? 0,
-            IpChanges_7d = result?.IpChanges_7d ?? 0,
-            CarrierChanges_7d = result?.CarrierChanges_7d ?? 0,
+            UniqueDevices_24h = Convert.ToInt32(result?.UniqueDevices_24h ?? 0),
+            UniqueDevices_7d = Convert.ToInt32(result?.UniqueDevices_7d ?? 0),
+            UniqueDevices_30d = Convert.ToInt32(result?.UniqueDevices_30d ?? 0),
+            TotalDevicesEverUsed = Convert.ToInt32(result?.TotalDevicesEverUsed ?? 0),
+            IpChanges_24h = Convert.ToInt32(result?.IpChanges_24h ?? 0),
+            IpChanges_7d = Convert.ToInt32(result?.IpChanges_7d ?? 0),
+            CarrierChanges_7d = Convert.ToInt32(result?.CarrierChanges_7d ?? 0),
             GeographicJumps_24h = geographicJumps,
             HasImpossibleTravel = geographicJumps > 0,
             RecentDevices = deviceList
@@ -521,11 +526,21 @@ public class ClickHouseService
             ORDER BY UniqueUserCount DESC, AvgScore DESC
             LIMIT @Limit";
 
-        var cases = await connection.QueryAsync<MultiAccountingCase>(
+        var results = await connection.QueryAsync<dynamic>(
             query,
             new { FromDate = fromDate, Limit = limit });
 
-        return cases.ToList();
+        return results.Select(r => new MultiAccountingCase
+        {
+            GlobalDeviceId = r.GlobalDeviceId,
+            DeviceKey = r.DeviceKey,
+            UniqueUserCount = Convert.ToInt32(r.UniqueUserCount),
+            UserIds = ((string[])r.UserIds).ToList(),
+            PhoneNumbers = ((string[])r.PhoneNumbers).ToList(),
+            FirstSeen = r.FirstSeen,
+            LastSeen = r.LastSeen,
+            RiskScore = r.RiskScore
+        }).ToList();
     }
 
     public async Task<List<MultiDevicingCase>> GetTopMultiDevicingUsersAsync(
@@ -566,10 +581,21 @@ public class ClickHouseService
             ORDER BY UniqueDeviceCount DESC, AvgScore DESC
             LIMIT @Limit";
 
-        var cases = await connection.QueryAsync<MultiDevicingCase>(
+        var results = await connection.QueryAsync<dynamic>(
             query,
             new { FromDate = fromDate, Limit = limit });
 
-        return cases.ToList();
+        return results.Select(r => new MultiDevicingCase
+        {
+            UserId = r.UserId,
+            PhoneNumber = r.PhoneNumber,
+            UniqueDeviceCount = Convert.ToInt32(r.UniqueDeviceCount),
+            DeviceKeys = ((string[])r.DeviceKeys).ToList(),
+            HasImpossibleTravel = r.HasImpossibleTravel == 1,
+            GeographicJumps = Convert.ToInt32(r.GeographicJumps),
+            FirstSeen = r.FirstSeen,
+            LastSeen = r.LastSeen,
+            RiskScore = r.RiskScore
+        }).ToList();
     }
 }
