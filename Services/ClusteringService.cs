@@ -42,7 +42,16 @@ public class ClusteringService
                 return;
             }
 
-            var dataView = _mlContext.Data.LoadFromEnumerable(trainingData);
+            // Create schema definition to exclude identifier properties that ML.NET can't handle
+            var schemaDefinition = Microsoft.ML.Data.SchemaDefinition.Create(typeof(FraudFeatures));
+            schemaDefinition["SessionId"].ColumnType = null;  // Exclude from schema
+            schemaDefinition["ProfileId"].ColumnType = null;  // Exclude Guid? (not supported)
+            schemaDefinition["DeviceKey"].ColumnType = null;  // Exclude from schema
+            schemaDefinition["GlobalDeviceId"].ColumnType = null;  // Exclude from schema
+            schemaDefinition["UserId"].ColumnType = null;  // Exclude from schema
+            schemaDefinition["PhoneNumber"].ColumnType = null;  // Exclude from schema
+
+            var dataView = _mlContext.Data.LoadFromEnumerable(trainingData, schemaDefinition);
 
             // Use key features for clustering
             var featureColumns = new[]
