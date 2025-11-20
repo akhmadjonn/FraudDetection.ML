@@ -23,9 +23,9 @@ public class ClusterPrediction
 public class FraudAnalysisResult
 {
     public string SessionId { get; set; } = string.Empty;
-    public string ProfileId { get; set; } = string.Empty;
+    public Guid ProfileId { get; set; } 
     public string DeviceKey { get; set; } = string.Empty;
-    public string GlobalDeviceId { get; set; } = string.Empty;
+    public Guid GlobalDeviceId { get; set; }
     public string UserId { get; set; } = string.Empty;
     public string PhoneNumber { get; set; } = string.Empty;
     public DateTime AnalyzedAt { get; set; }
