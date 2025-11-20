@@ -23,7 +23,7 @@ public class ClusterPrediction
 public class FraudAnalysisResult
 {
     public string SessionId { get; set; } = string.Empty;
-    public Guid ProfileId { get; set; } 
+    public Guid? ProfileId { get; set; }  // Nullable - not always present
     public string DeviceKey { get; set; } = string.Empty;
     public Guid GlobalDeviceId { get; set; }
     public string UserId { get; set; } = string.Empty;
